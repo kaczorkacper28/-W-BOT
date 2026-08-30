@@ -1,0 +1,9 @@
+{
+  "name": "zw-bot",
+  "version": "1.0.0",
+  "description": "Żandarmeria Wojskowa RP - system serwera, kadr, podań i egzaminów",
+  "main": "src/index.js",
+  "scripts": { "start": "node src/index.js" },
+  "engines": { "node": ">=20.0.0" },
+  "dependencies": { "discord.js": "^14.25.1", "dotenv": "^16.6.1" }
+}
