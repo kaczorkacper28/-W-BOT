@@ -1,45 +1,51 @@
 # 🇵🇱 Żandarmeria Wojskowa RP — ŻW BOT
 
-System Discord dla realistycznego serwera Żandarmerii Wojskowej RP.
+Pierwsza kompletna wersja projektu bota Discord dla realistycznego serwera Żandarmerii Wojskowej RP.
 
-## Funkcje
-- automatyczne tworzenie struktury serwera;
-- osobne role stopni wojskowych i stanowisk funkcyjnych;
-- role pionów ŻW i statusów służby;
-- system numerów służbowych ŻW-0001;
+## Co jest już zbudowane
+- automatyczna struktura serwera;
+- osobne stopnie wojskowe i stanowiska funkcyjne;
+- piony i jednostki ŻW;
+- numery służbowe `ŻW-0001`;
+- trwała baza danych `data/zw-data.json`;
 - karty służbowe;
-- awanse i degradacje;
-- status służby;
-- panel rekrutacyjny;
-- podania kandydatów;
+- awanse, degradacje i status służby;
+- rekrutacja i formularz podania;
 - egzamin kandydata;
-- wyniki egzaminów;
-- kanały jednostek i pionów;
-- kanały dowództwa i logów.
+- logi podań, egzaminów, wejść/wyjść i zmian kadrowych;
+- kanały dowództwa i logów chronione przed obywatelami;
+- automatyczna rola `👤 Obywatel` po wejściu.
 
-## Widoczność
-Serwer jest rozdzielony na strefy:
+## Separacja widoczności
 
 ### 👤 Obywatel
-Obywatel otrzymuje rolę `👤 Obywatel` i widzi wyłącznie kategorię `🇵🇱 INFORMACJE DLA OBYWATELI` oraz publiczny panel rekrutacyjny.
+Widoczne są wyłącznie:
+- `🇵🇱 INFORMACJE DLA OBYWATELI`;
+- `🎓 REKRUTACJA — PUBLICZNA`.
+
+Obywatel nie widzi służby, kadr, jednostek, pionów, dowództwa, logów ani wewnętrznych podań.
 
 ### 🎓 Kandydat ŻW
-Po rozpoczęciu rekrutacji kandydat powinien otrzymać rolę `🎓 Kandydat ŻW`. Kanały rekrutacyjne i egzaminacyjne są przeznaczone dla kandydatów oraz kadry.
+Po nadaniu roli kandydat otrzymuje dostęp do prywatnej strefy rekrutacji i egzaminu oraz do materiałów przeznaczonych dla kandydatów.
 
-### 🛡️ Kadra
-Kadra ma dostęp do kanałów służbowych, kadr, szkoleń, jednostek i pionów.
+### 🛡️ Żołnierz ŻW
+Dostęp do służby, kadr, szkoleń, jednostek i pionów.
 
 ### 👑 Dowództwo
-Dowództwo ma dodatkowy dostęp do dokumentów dowództwa i logów.
+Dodatkowo: gabinet, narady, dokumenty dowództwa i logi.
 
 ## Uruchomienie
-1. Zainstaluj Node.js 20+.
-2. Wykonaj `npm install`.
-3. Skopiuj `.env.example` do `.env`.
-4. Uzupełnij `TOKEN`, `CLIENT_ID` i `GUILD_ID`.
-5. Bot musi mieć na serwerze uprawnienia do zarządzania kanałami, rolami i wiadomościami.
-6. Rola `ŻW BOT` musi znajdować się wyżej niż role, którymi bot ma zarządzać.
-7. Uruchom `npm start`.
 
-## Ważne
-To projekt RP. Nazewnictwo i procesy można dostosować do regulaminu konkretnego serwera bez udawania, że bot jest oficjalnym systemem Żandarmerii Wojskowej.
+1. Node.js 20+.
+2. `npm install`
+3. Skopiuj `env.example` do `.env`.
+4. Uzupełnij `TOKEN`, `CLIENT_ID`, `GUILD_ID`.
+5. `npm start`
+
+Bot potrzebuje uprawnień do zarządzania kanałami, rolami i wiadomościami. Rola `🤖 ŻW BOT` musi być wyżej od ról, którymi bot ma zarządzać.
+
+## Zachowane wcześniejsze pliki
+
+Poprzednie pliki projektu nie zostały usunięte. `src/index.js` oraz `src/index-v1.js` pozostają w repozytorium. Aktualnie `npm start` uruchamia `src/index-v2.js`.
+
+Projekt jest przeznaczony do fikcyjnego RP i nie jest oficjalnym systemem Żandarmerii Wojskowej.
