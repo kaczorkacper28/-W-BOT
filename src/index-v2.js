@@ -14,7 +14,7 @@ const STATUS=['🟢 W służbie','⚫ Poza służbą','🔵 Szkolenie','🟣 Del
 const N={citizen:'👤 Obywatel',candidate:'🎓 Kandydat ŻW',staff:'🛡️ Żołnierz ŻW',command:'👑 Dowództwo',bot:'🤖 ŻW BOT'};
 const ids={};
 const slug=s=>s.toLowerCase().replaceAll('ą','a').replaceAll('ć','c').replaceAll('ę','e').replaceAll('ł','l').replaceAll('ń','n').replaceAll('ó','o').replaceAll('ś','s').replaceAll('ź','z').replaceAll('ż','z').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-const role=async(g,n,c)=>g.roles.cache.find(r=>r.name===n)||g.roles.create({name:n,color:c});
+const role=async(g,n,c)=>g.roles.cache.find(r=>r.name===n)||g.roles.create({name:n,colors:c});
 const ow=(id,a=[],d=[])=>({id,allow:a,deny:d});
 async function cat(g,name,visible){let c=g.channels.cache.find(x=>x.type===ChannelType.GuildCategory&&x.name===name);const o=[ow(g.roles.everyone.id,[],[P.ViewChannel])];for(const r of visible)o.push(ow(r.id,[P.ViewChannel]));o.push(ow(ids.bot,[P.ViewChannel,P.SendMessages,P.ManageChannels,P.ManageMessages]));if(!c)c=await g.channels.create({name,type:ChannelType.GuildCategory,permissionOverwrites:o});else await c.permissionOverwrites.set(o).catch(()=>{});return c;}
 async function ch(g,name,parent,visible,bot=true){let c=g.channels.cache.find(x=>x.type===ChannelType.GuildText&&x.name===name);const o=[ow(g.roles.everyone.id,[],[P.ViewChannel])];for(const r of visible)o.push(ow(r.id,[P.ViewChannel,P.ReadMessageHistory,P.SendMessages]));if(bot)o.push(ow(ids.bot,[P.ViewChannel,P.ReadMessageHistory,P.SendMessages,P.ManageMessages]));if(!c)c=await g.channels.create({name,type:ChannelType.GuildText,parent,permissionOverwrites:o});else await c.permissionOverwrites.set(o).catch(()=>{});ids[name]=c.id;return c;}
@@ -37,7 +37,6 @@ async function setup(g){
   const cmd=await cat(g,'👑 DOWÓDZTWO',[command]);for(const n of ['👑・gabinet-komendanta','⭐・narady-dowództwa','📜・rozkazy-wewnętrzne','📊・raporty-dowództwa','📋・sprawy-kadrowe','📁・archiwum-dowództwa'])await ch(g,n,cmd,[command]);
   const logs=await cat(g,'🔐 LOGI',[command]);for(const n of ['📥・log-wejścia','📤・log-wyjścia','🎭・log-ról','📋・log-kadrowy','⬆️・log-awansów','⬇️・log-degradacji','⚠️・log-kar','📝・log-podań','🎓・log-egzaminów','🎫・log-ticketów','🛡️・log-administracji'])await ch(g,n,logs,[command]);
   const vc=await cat(g,'🔊 ŁĄCZNOŚĆ GŁOSOWA',[staff]);for(const n of ['📻・Dyspozytornia','🚔・Patrol 01','🚔・Patrol 02','🎓・Sala szkoleniowa','👑・Dowództwo'])await voice(g,n,vc,[staff,command]);
-  // Bot musi być wyżej od ról, którymi zarządza.
   await bot.setPosition(g.roles.cache.size-1).catch(()=>{});
 }
 function has(m,n){return m.roles.cache.some(r=>r.name===n)}function staff(m){return has(m,N.staff)||has(m,'📋 Kadry')||has(m,N.command)||m.permissions.has(P.Administrator)}function command(m){return has(m,N.command)||m.permissions.has(P.Administrator)}
@@ -56,7 +55,7 @@ const cmds=[
 ].map(x=>x.toJSON());
 async function register(){const rest=new REST({version:'10'}).setToken(TOKEN);await rest.put(Routes.applicationGuildCommands(CLIENT_ID,GUILD_ID),{body:cmds});}
 
-client.once('ready',async()=>{const g=await client.guilds.fetch(GUILD_ID);await setup(g);await register();console.log(`ŻW BOT v2 online jako ${client.user.tag}`);});
+client.once('clientReady',async()=>{const g=await client.guilds.fetch(GUILD_ID);await setup(g);await register();console.log(`ŻW BOT v2 online jako ${client.user.tag}`);});
 client.on('guildMemberAdd',async m=>{const r=m.guild.roles.cache.find(x=>x.name===N.citizen);if(r)await m.roles.add(r).catch(()=>{});await log(m.guild,'📥・log-wejścia','📥 Nowy członek',`${m} otrzymał rolę **${N.citizen}**.`)});
 client.on('guildMemberRemove',async m=>log(m.guild,'📤・log-wyjścia','📤 Odejście z serwera',m.user?.tag||m.id));
 
