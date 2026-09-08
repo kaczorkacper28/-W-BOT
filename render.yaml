@@ -1,0 +1,7 @@
+services:
+  - type: worker
+    name: zw-bot
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
