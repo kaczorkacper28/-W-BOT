@@ -12,6 +12,43 @@ function normalize(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+function findLogChannel(guild, names) {
+  const wanted = names.map(normalize);
+  return guild.channels.cache.find(c =>
+    c.type === ChannelType.GuildText && wanted.includes(normalize(c.name))
+  ) || null;
+}
+
+const LOG_CHANNELS = {
+  wejscia: ['log-wejscia'],
+  wyjscia: ['log-wyjscia'],
+  role: ['log-rol'],
+  kadrowy: ['log-kadrowy'],
+  awanse: ['log-awansow'],
+  degradacje: ['log-degradacji'],
+  kary: ['log-kar'],
+  podania: ['log-podan'],
+  egzaminy: ['log-egzaminow'],
+  tickety: ['log-ticketow'],
+  administracja: ['log-administracji']
+};
+
+async function logEvent(guild, type, title, description) {
+  const channel = findLogChannel(guild, LOG_CHANNELS[type] || LOG_CHANNELS.kadrowy);
+  if (!channel) {
+    console.warn(`⚠️ Nie znaleziono kanału logów: ${type}`);
+    return false;
+  }
+  await channel.send({
+    embeds: [new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(description)
+      .setTimestamp()
+      .setFooter({ text: 'ŻW BOT • System logów' })]
+  }).catch(error => console.error(`❌ Nie można wysłać logu ${type}:`, error.message));
+  return true;
+}
+
 async function discoverTicketCategory() {
   if (!TOKEN || !GUILD_ID) return null;
   const response = await fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/channels`, {
@@ -36,19 +73,25 @@ function isStaff(member) {
   return !!member && (member.permissions.has(P.Administrator) || staffRoleIds.some(id => member.roles.cache.has(id)));
 }
 
+function classifyCommand(name) {
+  if (name === 'zw-awans') return ['awanse', '⬆️ AWANS — LOG', 'Zmiana kadrowa wykonana przez <@{by}>.'];
+  if (name === 'zw-degradacja') return ['degradacje', '⬇️ DEGRADACJA — LOG', 'Zmiana kadrowa wykonana przez <@{by}>.'];
+  if (name === 'zw-postepowanie') return ['kary', '⚠️ POSTĘPOWANIE — LOG', 'Postępowanie dodane przez <@{by}>.'];
+  if (name === 'zw-plus' || name === 'zw-minus') return ['kadrowy', name === 'zw-plus' ? '➕ PLUS — LOG' : '➖ MINUS — LOG', 'Operacja punktowa wykonana przez <@{by}>.'];
+  if (name === 'zw-raport' || name === 'zw-meldunek' || name === 'zw-rozkaz' || name === 'zw-sluzba') return ['kadrowy', `📋 ${name.toUpperCase()} — LOG`, 'Operacja wykonana przez <@{by}>.'];
+  if (name === 'zw-wyroznienie' || name === 'zw-szkolenie' || name === 'zw-kwalifikacja') return ['kadrowy', `📋 ${name.toUpperCase()} — LOG`, 'Operacja wykonana przez <@{by}>.'];
+  if (name === 'zw-egzamin-szkoleniowy' || name === 'zw-rekrutacja' || name === 'zw-egzamin-final') return ['egzaminy', `🎓 ${name.toUpperCase()} — LOG`, 'Operacja egzaminacyjna/rekrutacyjna wykonana przez <@{by}>.'];
+  if (name === 'zw-panel' || name === 'zw-pomoc' || name === 'zw-zamknij') return ['administracja', `🛠️ ${name.toUpperCase()} — LOG`, 'Operacja administracyjna wykonana przez <@{by}>.'];
+  return null;
+}
+
 async function handleTicketInteraction(interaction) {
-  // Stary przycisk z istniejącego panelu #kontakt otwiera teraz wybór konkretnej sprawy.
   if (interaction.isButton() && interaction.customId === 'ticket_help') {
     const panel = ticketSystem.panel();
-    await interaction.reply({
-      embeds: panel.embeds,
-      components: panel.components,
-      ephemeral: true
-    });
+    await interaction.reply({ embeds: panel.embeds, components: panel.components, ephemeral: true });
     return true;
   }
 
-  // /zw-pomoc publikuje pełny panel z wyborem rodzaju sprawy.
   if (interaction.isChatInputCommand() && interaction.commandName === 'zw-pomoc') {
     if (!isStaff(interaction.member)) {
       await interaction.reply({ content: '❌ Ta funkcja jest dostępna tylko dla kadry.', ephemeral: true });
@@ -62,6 +105,7 @@ async function handleTicketInteraction(interaction) {
       return true;
     }
     await channel.send(ticketSystem.panel());
+    await logEvent(interaction.guild, 'administracja', '🆘 PANEL POMOCY', `<@${interaction.user.id}> opublikował panel ticketów w ${channel}.`);
     await interaction.reply({ content: '✅ Nowy panel ticketów został opublikowany w #kontakt.', ephemeral: true });
     return true;
   }
@@ -80,7 +124,15 @@ async function handleTicketInteraction(interaction) {
     const subject = interaction.fields.getTextInputValue('subject');
     const description = interaction.fields.getTextInputValue('description');
 
-    await ticketSystem.createTicket(interaction, kind, staffRoleIds);
+    await ticketSystem.createTicket(
+      interaction,
+      kind,
+      staffRoleIds,
+      null,
+      () => {},
+      async (guild, title, text) => logEvent(guild, 'tickety', title, text)
+    );
+
     const topic = `ZW-TICKET:${kind}:${interaction.user.id}`;
     const channel = interaction.guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.topic === topic);
     if (channel) {
@@ -108,6 +160,7 @@ async function handleTicketInteraction(interaction) {
       return true;
     }
 
+    await logEvent(interaction.guild, 'tickety', '🔒 ZAMKNIĘCIE TICKETU', `Kanał: ${channel}\nUżytkownik: <@${ownerId}>\nZamknął: <@${interaction.user.id}>`);
     await interaction.reply({ content: '🔒 Ticket zostanie zamknięty.', ephemeral: true });
     setTimeout(() => channel.delete().catch(() => {}), 800);
     return true;
@@ -122,11 +175,25 @@ function installInteractionBridge() {
     if (event === 'interactionCreate') {
       const wrapped = async interaction => {
         try {
+          if (interaction.isChatInputCommand()) {
+            const classification = classifyCommand(interaction.commandName);
+            if (classification) {
+              const [type, title, text] = classification;
+              await logEvent(interaction.guild, type, title, text.replace('{by}', interaction.user.id));
+            }
+          } else if (interaction.isModalSubmit() && interaction.customId === 'public_application') {
+            await logEvent(interaction.guild, 'podania', '📋 NOWE PODANIE', `Nowe podanie publiczne złożył(a) <@${interaction.user.id}>.`);
+          } else if (interaction.isButton() && interaction.customId === 'start_candidate') {
+            await logEvent(interaction.guild, 'egzaminy', '🎓 REKRUTACJA KANDYDATA', `Kandydat <@${interaction.user.id}> rozpoczął etap rekrutacji.`);
+          } else if (interaction.isButton() && interaction.customId === 'start_final') {
+            await logEvent(interaction.guild, 'egzaminy', '🏁 EGZAMIN KOŃCOWY', `Kandydat <@${interaction.user.id}> rozpoczął egzamin końcowy.`);
+          }
+
           if (await handleTicketInteraction(interaction)) return;
         } catch (error) {
-          console.error('❌ Błąd systemu ticketów:', error.message);
+          console.error('❌ Błąd systemu ticketów/logów:', error.message);
           if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ Wystąpił błąd systemu ticketów.', ephemeral: true }).catch(() => {});
+            await interaction.reply({ content: '❌ Wystąpił błąd systemu.', ephemeral: true }).catch(() => {});
           }
           return;
         }
