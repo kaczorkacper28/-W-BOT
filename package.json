@@ -1,9 +1,9 @@
 {
   "name": "zw-bot",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "Żandarmeria Wojskowa RP — system rekrutacji, kadr, raportów, meldunków, rozkazów, szkoleń i ticketów",
-  "main": "src/zw-system-v2.js",
-  "scripts": { "start": "node src/zw-system-v2.js" },
+  "main": "src/start.js",
+  "scripts": { "start": "node src/start.js" },
   "engines": { "node": ">=20.0.0" },
   "dependencies": { "discord.js": "^14.25.1", "dotenv": "^16.6.1" }
 }
