@@ -15,24 +15,27 @@ async function discoverTicketCategory() {
 
   const channels = await response.json();
 
-  // Jeśli podano TICKET_CATEGORY_ID i faktycznie wskazuje kategorię, zachowujemy ją.
-  if (process.env.TICKET_CATEGORY_ID) {
-    const configured = channels.find(c => c.id === process.env.TICKET_CATEGORY_ID);
-    if (configured?.type === 4) return configured.id;
+  // ZAWSZE używamy kategorii nadrzędnej istniejącego kanału #kontakt.
+  // TICKET_CATEGORY_ID z .env nie ma pierwszeństwa, dzięki czemu stary/błędny ID
+  // nie blokuje systemu ticketów.
+  const normalize = value => String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+
+  const contact = channels.find(c =>
+    c.type === 0 && ['kontakt', 'pomoc'].includes(normalize(c.name))
+  );
+
+  if (contact?.parent_id) {
+    const category = channels.find(c => c.id === contact.parent_id && c.type === 4);
+    if (category) return category.id;
   }
 
-  // Główne źródło: istniejący kanał #kontakt. Bot używa kategorii nadrzędnej tego kanału.
-  const contact = channels.find(c => {
-    if (c.type !== 0) return false;
-    const name = String(c.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    return name.includes('kontakt');
-  });
-
-  if (contact?.parent_id) return contact.parent_id;
-
-  // Dodatkowe bezpieczne nazwy istniejących kategorii, bez tworzenia nowych kanałów.
+  // Fallback tylko do już istniejącej kategorii — bot niczego nie tworzy.
   const categoryNames = ['tickety', 'ticket', 'pomoc', 'pomoc-tickety', 'pomoc-dla-obywateli'];
-  const fallback = channels.find(c => c.type === 4 && categoryNames.includes(String(c.name || '').toLowerCase()));
+  const fallback = channels.find(c => c.type === 4 && categoryNames.includes(normalize(c.name)));
   return fallback?.id || null;
 }
 
@@ -44,6 +47,7 @@ async function discoverTicketCategory() {
       process.exit(1);
     }
 
+    // Nadpisujemy nawet stary TICKET_CATEGORY_ID z Rendera.
     process.env.TICKET_CATEGORY_ID = categoryId;
     console.log(`🎫 Kategoria ticketów: ${categoryId} (wykryta automatycznie z #kontakt)`);
 
