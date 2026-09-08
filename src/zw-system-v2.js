@@ -1,59 +1,492 @@
 require('dotenv').config();
-const fs=require('node:fs'),path=require('node:path');
-const {Client,GatewayIntentBits,PermissionsBitField,ChannelType,REST,Routes,SlashCommandBuilder,EmbedBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle,ModalBuilder,TextInputBuilder,TextInputStyle}=require('discord.js');
-const {TOKEN,CLIENT_ID,GUILD_ID,STAFF_ROLE_IDS='',LOG_CHANNEL_ID=''}=process.env;
-if(!TOKEN||!CLIENT_ID||!GUILD_ID)throw new Error('Brak TOKEN, CLIENT_ID lub GUILD_ID w .env');
-const client=new Client({intents:[GatewayIntentBits.Guilds]}),P=PermissionsBitField.Flags;
-const staffIds=STAFF_ROLE_IDS.split(',').map(x=>x.trim()).filter(Boolean);
-const FILE=path.join(process.cwd(),'data','zw-final.json');
-const BASE={next:1,people:{},applications:[],recruitment:{},finalExams:{},reports:[],meldunki:[],orders:[],actions:[],proceedings:[],awards:[],trainings:[],trainingExams:[],materials:[],qualifications:[],duty:{},schedule:[],patrols:[],radio:[],tickets:[]};
-fs.mkdirSync(path.dirname(FILE),{recursive:true});
-let db;try{db={...BASE,...JSON.parse(fs.readFileSync(FILE,'utf8'))}}catch{db=structuredClone(BASE)}
-for(const k of Object.keys(BASE))if(db[k]===undefined)db[k]=BASE[k];
-const save=()=>fs.writeFileSync(FILE,JSON.stringify(db,null,2));
-const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
-const isStaff=m=>!!m&&(m.permissions.has(P.Administrator)||staffIds.some(id=>m.roles.cache.has(id)));
-const guard=i=>{if(!isStaff(i.member)){i.reply({content:'❌ Brak uprawnień kadry.',ephemeral:true});return false}return true};
-const CH={panel:['panel-podania'],requirements:['wymagania-rekrutacji'],candidate:['podania-wewnetrzne'],results:['wyniki-rekrutacji'],candidateExam:['egzamin-kandydata'],status:['status-rekrutacji'],reports:['raporty','raporty-sluzbowe','raport'],meldunki:['meldunki'],orders:['rozkazy'],schedule:['grafik-sluzby'],radio:['lacznosc'],patrols:['patrole'],personnel:['stan-osobowy'],cases:['sprawy-kadrowe'],promotions:['awanse'],demotions:['degradacje'],proceedings:['postepowania'],awards:['wyroznienia'],archive:['archiwum-kadr'],materials:['materialy'],trainings:['szkolenia'],examResults:['wyniki-egzaminow'],qualifications:['kwalifikacje'],contact:['kontakt']};
-const find=(g,k)=>g.channels.cache.find(c=>c.type===ChannelType.GuildText&&(CH[k]||[k]).some(n=>norm(n)===norm(c.name)));
-const category=(g,names)=>g.channels.cache.find(c=>c.type===ChannelType.GuildCategory&&names.some(n=>norm(c.name).includes(norm(n))));
-async function post(g,k,title,text){const c=find(g,k);if(c)await c.send({embeds:[new EmbedBuilder().setTitle(title).setDescription(String(text).slice(0,4000)).setTimestamp()]}).catch(()=>{});return c}
-function roleCandidate(g){return g.roles.cache.find(r=>['kandydatzw','kandydat'].includes(norm(r.name)))||null}
-function person(u){if(!db.people[u.id]){db.people[u.id]={id:u.id,number:`ZW-${String(db.next++).padStart(4,'0')}`,rank:'Kandydat',plus:0,minus:0,reprimands:0,awards:[],qualifications:[],trainings:[],history:[],joinedAt:new Date().toISOString()};save()}return db.people[u.id]}
-const RANKS=['Kandydat','Szeregowy','Starszy szeregowy','Kapral','Plutonowy','Sierżant','Starszy sierżant','Chorąży','Podporucznik','Porucznik','Kapitan','Major','Podpułkownik','Pułkownik','Generał brygady','Generał dywizji','Generał broni'];
-const Q1=[['Jaki jest podstawowy cel Żandarmerii Wojskowej?',['Ochrona porządku i dyscypliny wojskowej','Prowadzenie administracji cywilnej','Organizacja imprez','Kontrola ruchu lotniczego'],0],['Jak powinien wyglądać prawidłowy meldunek?',['Chaotycznie','Krótko, jasno i rzeczowo','Tylko emoji','Bez najważniejszych danych'],1],['Jak zachować się wobec przełożonego?',['Ignorować polecenia','Wykonywać zgodne z regulaminem polecenia','Dyskutować podczas każdej czynności','Publikować polecenia'],1],['Co oznacza RP?',['Real Play','RolePlay','Rapid Patrol','Regulamin Personalny'],1],['Jak zachować się podczas interwencji RP?',['Prowokować','Spokojnie i zgodnie z procedurą RP','Spamować','Opuszczać miejsce bez powodu'],1],['Czy dane kadrowe mogą być przekazane osobie nieuprawnionej?',['Tak','Nie','Zawsze','Tylko na czacie publicznym'],1],['Co zrobić, gdy potrzebujesz wsparcia?',['Nic','Wezwać wsparcie i przekazać meldunek','Opuścić służbę','Usunąć dokumentację'],1],['Czym jest dyscyplina służbowa?',['Dowolnością','Przestrzeganiem zasad, regulaminów i poleceń','Tylko noszeniem munduru','Brakiem odpowiedzialności'],1],['Jak należy zachować się podczas rekrutacji?',['Korzystać z podpowiedzi','Odpowiadać samodzielnie i uczciwie','Spamować','Ignorować pytania'],1],['Co powinien zawierać raport?',['Same emoji','Datę, miejsce, przebieg i istotne informacje','Losowe dane','Tylko podpis'],1]];
-const Q2=[['Co jest najważniejsze podczas służby w ŻW RP?',['Dyscyplina i wykonywanie obowiązków zgodnie z regulaminem','Liczba wiadomości','Samowolne działania','Unikanie przełożonych'],0],['Co robisz po otrzymaniu polecenia wymagającego meldunku?',['Nie robisz nic','Wykonujesz i przekazujesz wymagany meldunek','Publikujesz je publicznie','Usuwasz polecenie'],1],['Jak wygląda prawidłowa komunikacja radiowa?',['Długa i chaotyczna','Krótka, zrozumiała i rzeczowa','Same skróty bez kontekstu','Spam'],1],['Co robisz podczas konfliktu na służbie?',['Eskalujesz konflikt','Zachowujesz spokój i działasz według procedur','Opuszczasz serwer','Publikujesz prywatne dane'],1],['Co powinno znaleźć się w dokumentacji służbowej?',['Istotne fakty i przebieg czynności','Żarty','Losowe informacje','Nic'],0],['Kto może podejmować decyzje kadrowe?',['Każdy obywatel','Uprawniona kadra','Każdy kandydat','Osoba spoza serwera'],1],['Jak reagujesz na błąd podczas służby?',['Ukrywasz go','Informujesz przełożonego i korygujesz działanie','Usuwasz logi','Ignorujesz'],1],['Co oznacza podporządkowanie służbowe?',['Brak odpowiedzialności','Działanie w ramach hierarchii i kompetencji','Samowolę','Dowolność'],1],['Jak powinien zachować się kandydat wobec komisji?',['Lekceważąco','Kulturalnie i rzeczowo','Agresywnie','Chaotycznie'],1],['Kiedy kandydat przechodzi do egzaminu końcowego?',['Po zaliczeniu rekrutacji kandydata','Od razu po wejściu','Przed podaniem publicznym','Nigdy'],0]];
-const Q3=[['Jakie trzy elementy są szczególnie ważne w dobrym meldunku?',['Kto, co i gdzie/kiedy','Tylko imię','Tylko godzina','Tylko emoji'],0],['Jak postępujesz z informacją niejawną w RP?',['Udostępniasz publicznie','Chronisz ją i przekazujesz uprawnionym','Wysyłasz losowej osobie','Publikujesz w statusie'],1],['Co robisz, gdy rozkaz jest niejasny?',['Zgadujesz','Prosisz przełożonego o doprecyzowanie','Ignorujesz','Publikujesz pytanie publicznie'],1],['Jak dokumentujesz czynność służbową?',['Rzetelnie i zgodnie ze stanem faktycznym','Zmyślasz','Pomijasz szczegóły zawsze','Usuwasz wpis'],0],['Co jest podstawą dobrej służby?',['Dyscyplina, odpowiedzialność i współpraca','Samowola','Rywalizacja','Brak komunikacji'],0],['Jak reagujesz na prowokację?',['Eskalujesz','Zachowujesz profesjonalizm i kontrolę','Obrażasz','Kończysz służbę'],1],['Kto zatwierdza zmianę stopnia w systemie?',['Uprawniona kadra','Każdy użytkownik','Kandydat','Bot bez kontroli'],0],['Co robisz po zakończeniu służby?',['Pozostawiasz status bez zmian','Zamykasz służbę i uzupełniasz wymagane wpisy','Usuwasz raporty','Nic'],1],['Dlaczego ważne są szkolenia?',['Podnoszą przygotowanie do obowiązków','Nie mają znaczenia','Służą tylko do dekoracji','Zastępują służbę'],0],['Jaki jest cel egzaminu końcowego?',['Potwierdzenie przygotowania kandydata do służby RP','Zabawa','Losowanie stopnia','Nadanie uprawnień każdemu'],0]];
-function examPanel(type){const title=type==='candidate'?'🎓 REKRUTACJA KANDYDATA ŻW':'🏁 EGZAMIN KOŃCOWY KANDYDATA ŻW';const text=type==='candidate'?'Ten etap jest dostępny po pozytywnym rozpatrzeniu podania publicznego. Zawiera pytania rekrutacyjne. Przy wyniku minimum 70% kandydat przechodzi do egzaminu końcowego. W razie niezaliczenia może podejść ponownie.':'Egzamin końcowy jest ostatnim etapem. Zawiera pytania sprawdzające przygotowanie kandydata. Minimum 70%. Przy niezaliczeniu możliwe jest ponowne podejście.';return{embeds:[new EmbedBuilder().setTitle(title).setDescription(text)],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(type==='candidate'?'candidate_start':'final_start').setLabel(type==='candidate'?'Rozpocznij rekrutację':'Rozpocznij egzamin końcowy').setStyle(ButtonStyle.Success))]}}
-function publicPanel(){return{embeds:[new EmbedBuilder().setTitle('📋 PODANIE PUBLICZNE — ŻW').setDescription('Jesteś osobą z ulicy i chcesz rozpocząć drogę do Żandarmerii Wojskowej RP? Wypełnij pierwsze podanie. Po pozytywnym rozpatrzeniu otrzymasz status kandydata i przejdziesz do kolejnego etapu.')],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('public_apply').setLabel('Złóż podanie publiczne').setEmoji('📋').setStyle(ButtonStyle.Primary))]}}
-function helpPanel(){return{embeds:[new EmbedBuilder().setTitle('🆘 POMOC — ŻW').setDescription('Potrzebujesz pomocy? Otwórz prywatny ticket. Ticket widzi osoba zgłaszająca i uprawniona kadra.')],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('help_ticket').setLabel('Potrzebuję pomocy').setEmoji('🆘').setStyle(ButtonStyle.Primary))]}}
-function modalPublic(){return new ModalBuilder().setCustomId('public_modal').setTitle('Podanie publiczne ŻW').addComponents(...[['wiek','Wiek RP',TextInputStyle.Short,3],['dane','Imię i nazwisko RP',TextInputStyle.Short,100],['doswiadczenie','Doświadczenie RP',TextInputStyle.Paragraph,1000],['motywacja','Dlaczego chcesz do ŻW?',TextInputStyle.Paragraph,1000],['dyspozycyjnosc','Dyspozycyjność',TextInputStyle.Paragraph,500]].map(x=>new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(x[0]).setLabel(x[1]).setStyle(x[2]).setMaxLength(x[3]).setRequired(true))))}
-function safe(s){return String(s||'uzytkownik').toLowerCase().replace(/[^a-z0-9-]/g,'-').slice(0,35)||'uzytkownik'}
-async function privateChannel(i,type,topic,content){const g=i.guild;const cat=category(g,['rekrutacja—kandydat','rekrutacja-kandydat','tickety','pomoc']);if(!cat)return i.reply({content:'❌ Brak istniejącej kategorii na tickety. Bot nie tworzy kategorii.',ephemeral:true});const old=g.channels.cache.find(c=>c.type===ChannelType.GuildText&&c.topic===topic);if(old)return i.reply({content:`❌ Masz już otwarty ticket: ${old}`,ephemeral:true});const ow=[{id:g.roles.everyone.id,deny:[P.ViewChannel]},{id:i.user.id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory]}];for(const id of staffIds)ow.push({id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.ManageMessages]});if(g.members.me)ow.push({id:g.members.me.id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.ManageChannels,P.ManageMessages]});const ch=await g.channels.create({name:`${type}-${safe(i.user.username)}`,type:ChannelType.GuildText,parent:cat.id,topic,permissionOverwrites:ow});db.tickets.push({channel:ch.id,user:i.user.id,type,status:'OTWARTY',at:new Date().toISOString()});save();await ch.send(content);return i.reply({content:`✅ Utworzono ticket: ${ch}`,ephemeral:true})}
-async function askTicket(i,type){const cat=category(i.guild,['rekrutacja—kandydat','rekrutacja-kandydat','tickety','pomoc']);if(!cat)return i.reply({content:'❌ Nie znaleziono istniejącej kategorii ticketów. Bot nie tworzy kategorii.',ephemeral:true});const topic=`ZW-${type}:${i.user.id}`;const old=i.guild.channels.cache.find(c=>c.type===ChannelType.GuildText&&c.topic===topic);if(old)return i.reply({content:`❌ Masz już otwarty ticket: ${old}`,ephemeral:true});const ow=[{id:i.guild.roles.everyone.id,deny:[P.ViewChannel]},{id:i.user.id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory]}];for(const id of staffIds)ow.push({id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.ManageMessages]});if(i.guild.members.me)ow.push({id:i.guild.members.me.id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.ManageChannels,P.ManageMessages]});const ch=await i.guild.channels.create({name:`${type}-${safe(i.user.username)}`,type:ChannelType.GuildText,parent:cat.id,topic,permissionOverwrites:ow});db.tickets.push({channel:ch.id,user:i.user.id,type,status:'OTWARTY',at:new Date().toISOString()});save();await ch.send({embeds:[new EmbedBuilder().setTitle(type==='pomoc'?'🆘 TICKET POMOCY':'📋 TICKET REKRUTACYJNY').setDescription(`<@${i.user.id}>\nOpisz sprawę. Uprawniona kadra odpowie tutaj.`)],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close').setLabel('Zamknij ticket').setStyle(ButtonStyle.Danger))]});return i.reply({content:`✅ Ticket utworzony: ${ch}`,ephemeral:true})}
-function questionPanel(stage,n){const qs=stage==='candidate'?Q2:Q3;const q=qs[n],row=new ActionRowBuilder();q[1].forEach((a,k)=>row.addComponents(new ButtonBuilder().setCustomId(`q:${stage}:${n}:${k}`).setLabel(`${String.fromCharCode(65+k)}. ${a}`.slice(0,80)).setStyle(ButtonStyle.Secondary)));return{embeds:[new EmbedBuilder().setTitle(stage==='candidate'?`🎓 REKRUTACJA KANDYDATA ${n+1}/${qs.length}`:`🏁 EGZAMIN KOŃCOWY ${n+1}/${qs.length}`).setDescription(q[0])],components:[row]}}
-async function startStage(i,stage){const data=stage==='candidate'?db.recruitment:db.finalExams;const old=data[i.user.id];if(stage==='candidate'){const r=roleCandidate(i.guild);if(!r||!i.member.roles.cache.has(r.id))return i.reply({content:'❌ Najpierw musisz zostać zaakceptowany jako kandydat ŻW.',ephemeral:true})}else if(!db.recruitment[i.user.id]?.passed)return i.reply({content:'❌ Najpierw musisz zaliczyć rekrutację kandydata.',ephemeral:true});data[i.user.id]={userId:i.user.id,channelId:i.channel.id,q:0,score:0,status:'W_TRAKCIE',attempts:(old?.attempts||0)+1,startedAt:new Date().toISOString()};save();await i.reply({content:'✅ Rozpoczynasz etap.',ephemeral:true});return i.channel.send(questionPanel(stage,0))}
-async function finishStage(i,stage){const data=stage==='candidate'?db.recruitment:db.finalExams;const e=data[i.user.id],qs=stage==='candidate'?Q2:Q3;if(!e)return;const pct=Math.round(e.score/qs.length*100);e.percent=pct;e.status=pct>=70?'ZALICZONY':'NIEZALICZONY';e.finishedAt=new Date().toISOString();if(stage==='candidate'&&pct>=70)e.passed=true;if(stage==='final'&&pct>=70)e.passed=true;save();await post(i.guild,'results',stage==='candidate'?'🎓 WYNIK REKRUTACJI KANDYDATA':'🏁 WYNIK EGZAMINU KOŃCOWEGO',`Kandydat: <@${i.user.id}>\nWynik: **${pct}%**\nStatus: **${e.status}**\nPodejście: **${e.attempts}**`);return i.update({embeds:[new EmbedBuilder().setTitle(stage==='candidate'?'🎓 REKRUTACJA ZAKOŃCZONA':'🏁 EGZAMIN KOŃCOWY ZAKOŃCZONY').setDescription(`Wynik: **${pct}%**\nStatus: **${e.status}**\n${pct>=70?(stage==='candidate'?'Możesz teraz podejść do egzaminu końcowego.':'Kandydat zakończył proces rekrutacyjny z wynikiem pozytywnym.'):'Możesz podejść ponownie.'}`)],components:[]})}
-async function command(i){const c=i.commandName,g=i.guild;if(c==='zw-panel'){if(!guard(i))return;const p=find(g,'panel');const h=find(g,'contact');if(!p)return i.reply({content:'❌ Brak panel-podania.',ephemeral:true});await p.send(publicPanel());if(h)await h.send(helpPanel());return i.reply({content:'✅ Opublikowano podanie publiczne oraz panel pomocy/ticketów.',ephemeral:true})}if(c==='zw-rekrutacja'){if(!guard(i))return;const ch=find(g,'candidate');if(!ch)return i.reply({content:'❌ Brak podania-wewnetrzne.',ephemeral:true});await ch.send(examPanel('candidate'));return i.reply({content:'✅ Panel rekrutacji kandydata wysłany.',ephemeral:true})}if(c==='zw-egzamin'){if(!guard(i))return;const ch=find(g,'candidateExam');if(!ch)return i.reply({content:'❌ Brak egzamin-kandydata.',ephemeral:true});await ch.send(examPanel('final'));return i.reply({content:'✅ Panel egzaminu końcowego wysłany.',ephemeral:true})}if(c==='zw-zamknij'){if(!i.channel?.topic?.startsWith('ZW-'))return i.reply({content:'❌ To nie jest ticket ŻW.',ephemeral:true});if(!guard(i))return;const t=db.tickets.find(x=>x.channel===i.channel.id);if(t){t.status='ZAMKNIĘTY';t.closedAt=new Date().toISOString();t.closedBy=i.user.id;save()}await i.reply({content:'🔒 Ticket zostanie zamknięty.',ephemeral:true});return i.channel.delete().catch(()=>{})}if(c==='zw-podania'){if(!guard(i))return;const a=db.applications;return i.reply({content:`📋 Podania publiczne: **${a.filter(x=>x.type==='PUBLICZNE').length}** | kandydackie: **${a.filter(x=>x.type==='KANDYDATA').length}** | oczekujące: **${a.filter(x=>x.status==='OCZEKUJE').length}**`,ephemeral:true})}if(c==='zw-egzaminy'){if(!guard(i))return;const a=Object.values(db.recruitment),f=Object.values(db.finalExams);return i.reply({content:`🎓 Rekrutacje kandydata: **${a.length}** | 🏁 Egzaminy końcowe: **${f.length}**`,ephemeral:true})}
-if(['zw-raport','zw-meldunek'].includes(c)){const text=i.options.getString('tresc')||'Brak treści';const key=c==='zw-raport'?'reports':'meldunki';db[key].push({user:i.user.id,text,at:new Date().toISOString()});save();await post(g,key,c==='zw-raport'?'📄 RAPORT SŁUŻBOWY':'📝 MELDUNEK',`Autor: <@${i.user.id}>\n${text}`);return i.reply({content:'✅ Zapisano.',ephemeral:true})}
-if(c==='zw-rozkaz'){if(!guard(i))return;const t=i.options.getString('tytul'),x=i.options.getString('tresc');db.orders.push({user:i.user.id,title:t,text:x,at:new Date().toISOString()});save();await post(g,'orders',`📜 ROZKAZ — ${t}`,x);return i.reply({content:'✅ Rozkaz opublikowany.',ephemeral:true})}
-if(['zw-plus','zw-minus'].includes(c)){if(!guard(i))return;const u=i.options.getUser('osoba'),n=i.options.getInteger('punkty'),reason=i.options.getString('powod'),p=person(u);if(c==='zw-plus')p.plus=(p.plus||0)+n;else p.minus=(p.minus||0)+n;p.history.push({type:c==='zw-plus'?'PLUS':'MINUS',points:n,reason,by:i.user.id,at:new Date().toISOString()});db.actions.push({type:c,target:u.id,points:n,reason,by:i.user.id,at:new Date().toISOString()});save();await post(g,c==='zw-plus'?'awards':'proceedings',c==='zw-plus'?'➕ PLUS':'➖ MINUS',`Funkcjonariusz: <@${u.id}>\nPunkty: **${n}**\nPowód: ${reason}\nNadał: <@${i.user.id}>`);return i.reply({content:`✅ ${c==='zw-plus'?'Plus':'Minus'} zapisany.`,ephemeral:true})}
-if(['zw-awans','zw-degradacja'].includes(c)){if(!guard(i))return;const u=i.options.getUser('osoba'),p=person(u),old=p.rank,n=i.options.getString('stopien'),reason=i.options.getString('powod');p.rank=n;p.history.push({type:c==='zw-awans'?'AWANS':'DEGRADACJA',from:old,to:n,reason,by:i.user.id,at:new Date().toISOString()});save();await post(g,c==='zw-awans'?'promotions':'demotions',c==='zw-awans'?'⬆️ AWANS':'⬇️ DEGRADACJA',`<@${u.id}>\n**${old} → ${n}**\nPowód: ${reason}\nDecyzja: <@${i.user.id}>`);return i.reply({content:`✅ Zmieniono stopień: ${old} → ${n}.`,ephemeral:true})}
-if(c==='zw-postepowanie'||c==='zw-wyroznienie'){if(!guard(i))return;const u=i.options.getUser('osoba'),x=i.options.getString('opis'),p=person(u);if(c==='zw-postepowanie'){p.reprimands=(p.reprimands||0)+1;db.proceedings.push({user:u.id,description:x,by:i.user.id,at:new Date().toISOString()})}else{p.awards.push(x);db.awards.push({user:u.id,description:x,by:i.user.id,at:new Date().toISOString()})}p.history.push({type:c,description:x,by:i.user.id,at:new Date().toISOString()});save();await post(g,c==='zw-postepowanie'?'proceedings':'awards',c==='zw-postepowanie'?'⚠️ POSTĘPOWANIE':'🏅 WYRÓŻNIENIE',`<@${u.id}>\n${x}\nNadał: <@${i.user.id}>`);return i.reply({content:'✅ Zapisano.',ephemeral:true})}
-if(c==='zw-szkolenie'){if(!guard(i))return;const u=i.options.getUser('osoba'),n=i.options.getString('nazwa'),r=i.options.getString('wynik'),p=person(u);p.trainings.push(`${n} — ${r}`);db.trainings.push({user:u.id,name:n,result:r,by:i.user.id,at:new Date().toISOString()});save();await post(g,'trainings','🎓 SZKOLENIE',`<@${u.id}> — **${n}**\nWynik: ${r}`);return i.reply({content:'✅ Szkolenie zapisane.',ephemeral:true})}
-if(c==='zw-kwalifikacja'){if(!guard(i))return;const u=i.options.getUser('osoba'),n=i.options.getString('nazwa'),s=i.options.getString('status'),p=person(u);p.qualifications.push(`${n} — ${s}`);db.qualifications.push({user:u.id,name:n,status:s,by:i.user.id,at:new Date().toISOString()});save();await post(g,'qualifications','📋 KWALIFIKACJA',`<@${u.id}> — **${n}**\nStatus: ${s}`);return i.reply({content:'✅ Kwalifikacja zapisana.',ephemeral:true})}
-if(c==='zw-egzamin-szkolenie'){if(!guard(i))return;const u=i.options.getUser('osoba'),n=i.options.getString('nazwa'),pct=i.options.getInteger('procent'),st=pct>=70?'ZALICZONY':'NIEZALICZONY';db.trainingExams.push({user:u.id,name:n,percent:pct,status:st,by:i.user.id,at:new Date().toISOString()});save();await post(g,'examResults','📊 EGZAMIN SZKOLENIOWY',`<@${u.id}> — **${n}**\nWynik: **${pct}%** — ${st}`);return i.reply({content:`✅ Wynik zapisany: ${pct}% — ${st}.`,ephemeral:true})}
-if(c==='zw-funkcjonariusz'){const u=i.options.getUser('osoba')||i.user,p=person(u);return i.reply({embeds:[new EmbedBuilder().setTitle('🪖 KARTA SŁUŻBOWA').setDescription(`<@${u.id}>\nNumer: **${p.number}**\nStopień: **${p.rank}**\nPlusy: **${p.plus||0}**\nMinusy: **${p.minus||0}**\nNagany: **${p.reprimands||0}**\nKwalifikacje: ${(p.qualifications||[]).length}\nSzkolenia: ${(p.trainings||[]).length}`)],ephemeral:true})}
-if(c==='zw-sluzba'){const a=i.options.getString('akcja'),p=person(i.user),now=Date.now();if(a==='start'){if(db.duty[i.user.id])return i.reply({content:'⚠️ Już jesteś w służbie.',ephemeral:true});db.duty[i.user.id]=now;await post(g,'reports','🟢 ROZPOCZĘCIE SŁUŻBY',`<@${i.user.id}> rozpoczął służbę.`)}else{if(!db.duty[i.user.id])return i.reply({content:'⚠️ Nie jesteś w służbie.',ephemeral:true});p.duty=(p.duty||0)+now-db.duty[i.user.id];delete db.duty[i.user.id];await post(g,'reports','🔴 ZAKOŃCZENIE SŁUŻBY',`<@${i.user.id}> zakończył służbę.`)}save();return i.reply({content:a==='start'?'🟢 Służba rozpoczęta.':'🔴 Służba zakończona.',ephemeral:true})}
-if(c==='zw-statystyki'){if(!guard(i))return;return i.reply({content:`👮 Kadra: **${Object.keys(db.people).length}**\n📋 Podania: **${db.applications.length}**\n🎓 Rekrutacje kandydatów: **${Object.keys(db.recruitment).length}**\n🏁 Egzaminy końcowe: **${Object.keys(db.finalExams).length}**\n📄 Raporty: **${db.reports.length}**\n📝 Meldunki: **${db.meldunki.length}**\n📜 Rozkazy: **${db.orders.length}**\n🎓 Szkolenia: **${db.trainings.length}**\n🆘 Tickety: **${db.tickets.length}**`,ephemeral:true})}
+const fs = require('node:fs');
+const path = require('node:path');
+const {
+  Client, GatewayIntentBits, PermissionsBitField, ChannelType, REST, Routes,
+  SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  ModalBuilder, TextInputBuilder, TextInputStyle
+} = require('discord.js');
+
+const {
+  TOKEN, CLIENT_ID, GUILD_ID,
+  STAFF_ROLE_IDS = '',
+  CANDIDATE_ROLE_ID = '',
+  TICKET_CATEGORY_ID = '',
+  LOG_CHANNEL_ID = ''
+} = process.env;
+
+if (!TOKEN || !CLIENT_ID || !GUILD_ID) throw new Error('Brak TOKEN, CLIENT_ID lub GUILD_ID w .env');
+
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const P = PermissionsBitField.Flags;
+const staffRoles = STAFF_ROLE_IDS.split(',').map(x => x.trim()).filter(Boolean);
+const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_FILE = path.join(DATA_DIR, 'zw-data.json');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const EMPTY = {
+  nextNumber: 1,
+  personnel: {},
+  applications: [],
+  candidateTests: {},
+  finalTests: {},
+  reports: [],
+  meldunki: [],
+  orders: [],
+  promotions: [],
+  demotions: [],
+  pluses: [],
+  minuses: [],
+  proceedings: [],
+  awards: [],
+  trainings: [],
+  trainingExams: [],
+  materials: [],
+  qualifications: [],
+  duty: {},
+  tickets: []
+};
+
+let db = { ...EMPTY };
+try {
+  const loaded = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  db = { ...EMPTY, ...loaded };
+} catch (_) {}
+for (const key of Object.keys(EMPTY)) if (db[key] === undefined) db[key] = EMPTY[key];
+const save = () => fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
+
+const normalize = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+const isStaff = member => !!member && (member.permissions.has(P.Administrator) || staffRoles.some(id => member.roles.cache.has(id)));
+const staffOnly = async i => {
+  if (isStaff(i.member)) return true;
+  if (!i.replied && !i.deferred) await i.reply({ content: '❌ Ta funkcja jest dostępna tylko dla kadry.', ephemeral: true });
+  return false;
+};
+
+const RANKS = [
+  'Kandydat', 'Szeregowy', 'Starszy szeregowy', 'Kapral', 'Plutonowy', 'Sierżant',
+  'Starszy sierżant', 'Starszy chorąży', 'Podporucznik', 'Porucznik', 'Kapitan',
+  'Major', 'Podpułkownik', 'Pułkownik', 'Generał brygady', 'Generał dywizji', 'Generał broni'
+];
+
+const QUESTIONS = {
+  candidate: [
+    ['Co jest podstawą prawidłowej służby w RP?', ['Dyscyplina i regulamin', 'Samowola', 'Brak komunikacji', 'Dowolność'], 0],
+    ['Jak powinien wyglądać meldunek?', ['Krótko, jasno i rzeczowo', 'Chaotycznie', 'Tylko emoji', 'Bez danych'], 0],
+    ['Jak prowadzisz łączność?', ['Rzeczowo i zwięźle', 'Spamem', 'Krzykiem', 'Bez identyfikacji'], 0],
+    ['Co robisz po otrzymaniu polecenia?', ['Wykonujesz je zgodnie z regulaminem RP', 'Ignorujesz', 'Publikujesz je publicznie', 'Usuwasz'], 0],
+    ['Co powinien zawierać raport?', ['Datę, miejsce, przebieg i najważniejsze informacje', 'Same emoji', 'Losowe informacje', 'Nic'], 0],
+    ['Co robisz, gdy potrzebujesz wsparcia?', ['Przekazujesz meldunek i prosisz o wsparcie', 'Uciekasz', 'Spamujesz', 'Nic'], 0],
+    ['Jak zachować się wobec przełożonego?', ['Kulturalnie i zgodnie z hierarchią RP', 'Lekceważąco', 'Agresywnie', 'Ignorować'], 0],
+    ['Co robisz po popełnieniu błędu?', ['Informujesz przełożonego i korygujesz działanie', 'Ukrywasz', 'Usuwasz logi', 'Ignorujesz'], 0],
+    ['Kiedy przechodzisz do egzaminu końcowego?', ['Po zaliczeniu rekrutacji kandydata', 'Przed podaniem', 'Od razu', 'Nigdy'], 0],
+    ['Jak powinien zachować się kandydat podczas rekrutacji?', ['Samodzielnie, spokojnie i uczciwie', 'Korzystać z podpowiedzi', 'Spamować', 'Ignorować komisję'], 0]
+  ],
+  final: [
+    ['Co powinien zrobić funkcjonariusz po zakończeniu służby?', ['Zamknąć służbę i uzupełnić wymaganą dokumentację', 'Nic', 'Usunąć raport', 'Zostawić status'], 0],
+    ['Co jest najważniejsze w dobrym meldunku?', ['Kto, co, gdzie i kiedy', 'Tylko imię', 'Tylko godzina', 'Emoji'], 0],
+    ['Co robisz z informacją służbową przeznaczoną dla kadry?', ['Przekazujesz ją osobom uprawnionym', 'Publikujesz publicznie', 'Wysyłasz losowej osobie', 'Usuwasz'], 0],
+    ['Co robisz, gdy rozkaz jest niejasny?', ['Prosisz przełożonego o doprecyzowanie', 'Zgadujesz', 'Ignorujesz', 'Publikujesz'], 0],
+    ['Jak dokumentujesz czynność?', ['Rzetelnie i zgodnie ze stanem RP', 'Zmyślasz', 'Pomijasz wszystko', 'Usuwasz'], 0],
+    ['Jak reagujesz na prowokację?', ['Zachowujesz profesjonalizm i kontrolę', 'Eskalujesz', 'Obrażasz', 'Kończysz służbę'], 0],
+    ['Kto dokonuje zmian kadrowych?', ['Uprawniona kadra', 'Każdy użytkownik', 'Kandydat', 'Bot bez kontroli'], 0],
+    ['Dlaczego prowadzi się szkolenia?', ['Aby podnosić przygotowanie do służby RP', 'Nie mają znaczenia', 'Tylko dla wyglądu', 'Zastępują służbę'], 0],
+    ['Co jest podstawą współpracy w patrolu?', ['Komunikacja i podział obowiązków', 'Samowola', 'Brak łączności', 'Rywalizacja'], 0],
+    ['Jaki jest cel egzaminu końcowego?', ['Potwierdzenie przygotowania kandydata do służby RP', 'Losowanie stopnia', 'Zabawa', 'Nadanie stopnia każdemu'], 0]
+  ]
+};
+
+function personnel(user) {
+  if (!db.personnel[user.id]) {
+    db.personnel[user.id] = {
+      userId: user.id,
+      number: `ZW-${String(db.nextNumber++).padStart(4, '0')}`,
+      rank: 'Kandydat', plus: 0, minus: 0, reprimands: 0,
+      awards: [], trainings: [], qualifications: [], history: [], dutyMs: 0,
+      createdAt: new Date().toISOString()
+    };
+    save();
+  }
+  return db.personnel[user.id];
 }
-const S=(n,d)=>new SlashCommandBuilder().setName(n).setDescription(d);const u=o=>o.addUserOption(x=>x.setName('osoba').setDescription('Osoba').setRequired(true));
-const cmds=[S('zw-panel','Publikuje podanie publiczne i panel pomocy'),S('zw-rekrutacja','Publikuje rekrutację kandydata'),S('zw-egzamin','Publikuje egzamin końcowy'),S('zw-zamknij','Zamyka ticket'),S('zw-podania','Statystyki podań'),S('zw-egzaminy','Statystyki etapów'),S('zw-raport','Złóż raport').addStringOption(o=>o.setName('tresc').setDescription('Treść raportu').setRequired(true)),S('zw-meldunek','Złóż meldunek').addStringOption(o=>o.setName('tresc').setDescription('Treść meldunku').setRequired(true)),S('zw-rozkaz','Dodaj rozkaz').addStringOption(o=>o.setName('tytul').setDescription('Tytuł').setRequired(true)).addStringOption(o=>o.setName('tresc').setDescription('Treść').setRequired(true)),S('zw-plus','Dodaj plus').addUserOption(o=>o.setName('osoba').setDescription('Osoba').setRequired(true)).addIntegerOption(o=>o.setName('punkty').setDescription('Punkty').setMinValue(1).setMaxValue(100).setRequired(true)).addStringOption(o=>o.setName('powod').setDescription('Powód').setRequired(true)),S('zw-minus','Dodaj minus').addUserOption(o=>o.setName('osoba').setDescription('Osoba').setRequired(true)).addIntegerOption(o=>o.setName('punkty').setDescription('Punkty').setMinValue(1).setMaxValue(100).setRequired(true)).addStringOption(o=>o.setName('powod').setDescription('Powód').setRequired(true)),S('zw-awans','Awansuj').addUserOption(o=>o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o=>o.setName('stopien').setDescription('Stopień').setRequired(true).addChoices(...RANKS.map(x=>({name:x,value:x})))).addStringOption(o=>o.setName('powod').setDescription('Powód').setRequired(true)),S('zw-degradacja','Degraduj').addUserOption(o=>o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o=>o.setName('stopien').setDescription('Stopień').setRequired(true).addChoices(...RANKS.map(x=>({name:x,value:x})))).addStringOption(o=>o.setName('powod').setDescription('Powód').setRequired(true)),S('zw-postepowanie','Dodaj postępowanie').addUserOption(o=>o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o=>o.setName('opis').setDescription('Opis').setRequired(true)),S('zw-wyroznienie','Dodaj wyróżnienie').addUserOption(o=>o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o=>o.setName('opis').setDescription('Opis').setRequired(true)),S('zw-funkcjonariusz','Karta funkcjonariusza').addUserOption(o=>o.setName('osoba').setDescription('Osoba').setRequired(false)),S('zw-szkolenie','Dodaj szkolenie').addUserOption(o=>o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o=>o.setName('nazwa').setDescription('Nazwa').setRequired(true)).addStringOption(o=>o.setName('wynik').setDescription('Wynik').setRequired(true)),S('zw-egzamin-szkolenie','Zapisz egzamin szkoleniowy').addUserOption(o=>o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o=>o.setName('nazwa').setDescription('Nazwa').setRequired(true)).addIntegerOption(o=>o.setName('procent').setDescription('Procent').setMinValue(0).setMaxValue(100).setRequired(true)),S('zw-kwalifikacja','Dodaj kwalifikację').addUserOption(o=>o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o=>o.setName('nazwa').setDescription('Nazwa').setRequired(true)).addStringOption(o=>o.setName('status').setDescription('Status').setRequired(true)),S('zw-sluzba','Obsługa służby').addStringOption(o=>o.setName('akcja').setDescription('Akcja').setRequired(true).addChoices({name:'Rozpocznij',value:'start'},{name:'Zakończ',value:'stop'})),S('zw-statystyki','Statystyki systemu')].map(x=>x.toJSON());
-client.once('ready',async()=>{const rest=new REST({version:'10'}).setToken(TOKEN);await rest.put(Routes.applicationGuildCommands(CLIENT_ID,GUILD_ID),{body:cmds});console.log(`ŻW SYSTEM ONLINE: ${client.user.tag}`)});
-client.on('interactionCreate',async i=>{try{
-if(i.isChatInputCommand())return command(i);
-if(i.isButton()){if(i.customId==='public_apply')return i.showModal(modalPublic());if(i.customId==='help_ticket')return askTicket(i,'pomoc');if(i.customId==='new_app')return i.showModal(modalPublic());if(i.customId==='candidate_start')return startStage(i,'candidate');if(i.customId==='final_start')return startStage(i,'final');if(i.customId==='close'){if(!isStaff(i.member))return i.reply({content:'❌ Tylko kadra może zamknąć ticket.',ephemeral:true});const t=db.tickets.find(x=>x.channel===i.channel.id);if(t){t.status='ZAMKNIĘTY';t.closedBy=i.user.id;t.closedAt=new Date().toISOString();save()}await i.reply({content:'🔒 Zamykam ticket.',ephemeral:true});return i.channel.delete().catch(()=>{})}if(i.customId.startsWith('q:')){const [,stage,ns,as]=i.customId.split(':'),n=Number(ns),a=Number(as),data=stage==='candidate'?db.recruitment:db.finalExams,e=data[i.user.id],qs=stage==='candidate'?Q2:Q3;if(!e||e.channelId!==i.channel.id||e.q!==n)return i.reply({content:'❌ To pytanie jest nieaktualne.',ephemeral:true});if(a===qs[n][2])e.score++;e.q++;save();if(e.q>=qs.length)return finishStage(i,stage);await i.update({content:'✅ Odpowiedź zapisana.',components:[]});return i.channel.send(questionPanel(stage,e.q))}}
-if(i.isModalSubmit()){if(i.customId==='public_modal'){const d={wiek:i.fields.getTextInputValue('wiek'),dane:i.fields.getTextInputValue('dane'),doswiadczenie:i.fields.getTextInputValue('doswiadczenie'),motywacja:i.fields.getTextInputValue('motywacja'),dyspozycyjnosc:i.fields.getTextInputValue('dyspozycyjnosc')};const cat=category(i.guild,['rekrutacja—kandydat','rekrutacja-kandydat']);if(!cat)return i.reply({content:'❌ Brak istniejącej kategorii rekrutacji. Bot nie tworzy kategorii.',ephemeral:true});const topic=`ZW-PUBLIC:${i.user.id}`;const old=i.guild.channels.cache.find(c=>c.type===ChannelType.GuildText&&c.topic===topic);if(old)return i.reply({content:`❌ Masz już podanie: ${old}`,ephemeral:true});const ow=[{id:i.guild.roles.everyone.id,deny:[P.ViewChannel]},{id:i.user.id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory]}];for(const id of staffIds)ow.push({id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.ManageMessages]});if(i.guild.members.me)ow.push({id:i.guild.members.me.id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.ManageChannels,P.ManageMessages]});const ch=await i.guild.channels.create({name:`podanie-publiczne-${safe(i.user.username)}`,type:ChannelType.GuildText,parent:cat.id,topic,permissionOverwrites:ow});db.applications.push({user:i.user.id,channel:ch.id,type:'PUBLICZNE',status:'OCZEKUJE',at:new Date().toISOString(),...d});save();await ch.send({embeds:[new EmbedBuilder().setTitle('📋 NOWE PODANIE PUBLICZNE').setDescription(`Kandydat: <@${i.user.id}>\n**Wiek:** ${d.wiek}\n**Dane RP:** ${d.dane}\n**Doświadczenie:** ${d.doswiadczenie}\n**Motywacja:** ${d.motywacja}\n**Dyspozycyjność:** ${d.dyspozycyjnosc}`)],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('app_accept').setLabel('Przyjmij do kandydatury').setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId('app_reject').setLabel('Odrzuć').setStyle(ButtonStyle.Danger),new ButtonBuilder().setCustomId('close').setLabel('Zamknij').setStyle(ButtonStyle.Secondary))]});return i.reply({content:`✅ Podanie utworzone: ${ch}`,ephemeral:true})}}
-}catch(e){console.error(e);if(i.isRepliable()&&!i.replied&&!i.deferred)await i.reply({content:`❌ ${e.message}`,ephemeral:true}).catch(()=>{})}});
-client.on('interactionCreate',async i=>{try{if(!i.isButton())return;if(['app_accept','app_reject'].includes(i.customId)){if(!guard(i))return;const a=db.applications.find(x=>x.channel===i.channel.id);if(!a)return i.reply({content:'❌ Nie znaleziono podania.',ephemeral:true});a.status=i.customId==='app_accept'?'PRZYJĘTY':'ODRZUCONY';a.decidedBy=i.user.id;a.decidedAt=new Date().toISOString();if(a.status==='PRZYJĘTY'){const r=roleCandidate(i.guild);const m=await i.guild.members.fetch(a.user).catch(()=>null);if(r&&m)await m.roles.add(r).catch(()=>{});person(await i.client.users.fetch(a.user));}save();await post(i.guild,'results',`📋 PODANIE — ${a.status}`,`<@${a.user}>\nDecyzja: <@${i.user.id}>`);return i.reply({content:a.status==='PRZYJĘTY'?'✅ Przyjęto. Nadano status kandydata.':'❌ Podanie odrzucone.',ephemeral:true})}}catch(e){console.error(e)}});
+
+function findTextChannel(guild, names) {
+  const wanted = names.map(normalize);
+  return guild.channels.cache.find(c => c.type === ChannelType.GuildText && wanted.includes(normalize(c.name)));
+}
+
+async function logTo(guild, title, description, channelNames = []) {
+  let channel = null;
+  if (LOG_CHANNEL_ID) channel = guild.channels.cache.get(LOG_CHANNEL_ID) || null;
+  if (!channel && channelNames.length) channel = findTextChannel(guild, channelNames);
+  if (!channel) return;
+  await channel.send({ embeds: [new EmbedBuilder().setTitle(title).setDescription(description).setTimestamp()] }).catch(() => {});
+}
+
+function publicPanel() {
+  return {
+    embeds: [new EmbedBuilder().setTitle('📋 PODANIE PUBLICZNE — ŻANDARMERIA WOJSKOWA').setDescription(
+      'Jesteś osobą z ulicy i chcesz rozpocząć rekrutację do ŻW RP? Kliknij przycisk i wypełnij podstawowe podanie. Po pozytywnej decyzji kadry otrzymasz status kandydata i przejdziesz do kolejnego etapu.'
+    )],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('apply_public').setLabel('Złóż podanie').setEmoji('📋').setStyle(ButtonStyle.Primary)
+    )]
+  };
+}
+
+function candidatePanel() {
+  return {
+    embeds: [new EmbedBuilder().setTitle('🎓 REKRUTACJA KANDYDATA ŻW').setDescription(
+      'Ten etap jest dostępny dla osób, których podanie publiczne zostało zaakceptowane. Odpowiedz na pytania samodzielnie. Próg zaliczenia: **70%**. Po zaliczeniu odblokowuje się egzamin końcowy.'
+    )],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('start_candidate').setLabel('Rozpocznij rekrutację').setStyle(ButtonStyle.Success)
+    )]
+  };
+}
+
+function finalPanel() {
+  return {
+    embeds: [new EmbedBuilder().setTitle('🏁 EGZAMIN KOŃCOWY KANDYDATA ŻW').setDescription(
+      'Egzamin końcowy jest ostatnim etapem rekrutacji RP. Próg zaliczenia: **70%**. Przy niezaliczeniu możliwe jest ponowne podejście.'
+    )],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('start_final').setLabel('Rozpocznij egzamin końcowy').setStyle(ButtonStyle.Success)
+    )]
+  };
+}
+
+function helpPanel() {
+  return {
+    embeds: [new EmbedBuilder().setTitle('🆘 POMOC — ŻW').setDescription('Masz problem lub pytanie? Otwórz prywatny ticket. Widzi go zgłaszający oraz uprawniona kadra.')],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('ticket_help').setLabel('Potrzebuję pomocy').setEmoji('🆘').setStyle(ButtonStyle.Primary)
+    )]
+  };
+}
+
+function publicModal() {
+  const fields = [
+    ['name', 'Imię i nazwisko RP', TextInputStyle.Short, 100],
+    ['age', 'Wiek RP', TextInputStyle.Short, 3],
+    ['experience', 'Doświadczenie RP', TextInputStyle.Paragraph, 1000],
+    ['motivation', 'Dlaczego chcesz do ŻW?', TextInputStyle.Paragraph, 1000],
+    ['availability', 'Dyspozycyjność', TextInputStyle.Paragraph, 500]
+  ];
+  return new ModalBuilder().setCustomId('public_application').setTitle('Podanie publiczne ŻW').addComponents(
+    ...fields.map(([id, label, style, max]) => new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setMaxLength(max).setRequired(true)
+    ))
+  );
+}
+
+function safeName(s) { return normalize(s).slice(0, 28) || 'uzytkownik'; }
+
+async function createTicket(interaction, kind = 'pomoc') {
+  if (!TICKET_CATEGORY_ID) return interaction.reply({ content: '❌ Brak TICKET_CATEGORY_ID w .env.', ephemeral: true });
+  const category = interaction.guild.channels.cache.get(TICKET_CATEGORY_ID);
+  if (!category || category.type !== ChannelType.GuildCategory) return interaction.reply({ content: '❌ TICKET_CATEGORY_ID wskazuje na nieprawidłową kategorię.', ephemeral: true });
+  const topic = `ZW-TICKET:${kind}:${interaction.user.id}`;
+  const existing = interaction.guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.topic === topic);
+  if (existing) return interaction.reply({ content: `❌ Masz już otwarty ticket: ${existing}`, ephemeral: true });
+  const overwrites = [
+    { id: interaction.guild.roles.everyone.id, deny: [P.ViewChannel] },
+    { id: interaction.user.id, allow: [P.ViewChannel, P.SendMessages, P.ReadMessageHistory] }
+  ];
+  for (const roleId of staffRoles) overwrites.push({ id: roleId, allow: [P.ViewChannel, P.SendMessages, P.ReadMessageHistory, P.ManageMessages] });
+  if (interaction.guild.members.me) overwrites.push({ id: interaction.guild.members.me.id, allow: [P.ViewChannel, P.SendMessages, P.ReadMessageHistory, P.ManageChannels] });
+  const channel = await interaction.guild.channels.create({
+    name: `${kind}-${safeName(interaction.user.username)}`,
+    type: ChannelType.GuildText,
+    parent: category.id,
+    topic,
+    permissionOverwrites: overwrites
+  });
+  db.tickets.push({ channelId: channel.id, userId: interaction.user.id, kind, status: 'OTWARTY', createdAt: new Date().toISOString() });
+  save();
+  await channel.send({ embeds: [new EmbedBuilder().setTitle(kind === 'pomoc' ? '🆘 TICKET POMOCY' : '📋 TICKET REKRUTACYJNY').setDescription(`<@${interaction.user.id}> opisz swoją sprawę. Uprawniona kadra odpowie tutaj.`)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij ticket').setStyle(ButtonStyle.Danger))] });
+  await interaction.reply({ content: `✅ Ticket utworzony: ${channel}`, ephemeral: true });
+}
+
+async function postQuestion(interaction, stage, index) {
+  const questions = QUESTIONS[stage];
+  const q = questions[index];
+  const row = new ActionRowBuilder();
+  q[1].forEach((answer, n) => row.addComponents(new ButtonBuilder().setCustomId(`answer:${stage}:${index}:${n}`).setLabel(`${String.fromCharCode(65 + n)}. ${answer}`.slice(0, 80)).setStyle(ButtonStyle.Secondary)));
+  await interaction.channel.send({ embeds: [new EmbedBuilder().setTitle(stage === 'candidate' ? `🎓 PYTANIE ${index + 1}/${questions.length}` : `🏁 PYTANIE ${index + 1}/${questions.length}`).setDescription(q[0])], components: [row] });
+}
+
+async function startTest(interaction, stage) {
+  const p = personnel(interaction.user);
+  if (stage === 'candidate') {
+    if (CANDIDATE_ROLE_ID && !interaction.member.roles.cache.has(CANDIDATE_ROLE_ID)) return interaction.reply({ content: '❌ Musisz mieć rolę kandydata ŻW.', ephemeral: true });
+  } else {
+    const previous = db.candidateTests[interaction.user.id];
+    if (!previous?.passed) return interaction.reply({ content: '❌ Najpierw musisz zaliczyć rekrutację kandydata.', ephemeral: true });
+  }
+  const store = stage === 'candidate' ? db.candidateTests : db.finalTests;
+  const previous = store[interaction.user.id];
+  store[interaction.user.id] = {
+    userId: interaction.user.id, channelId: interaction.channel.id, index: 0, score: 0,
+    attempts: (previous?.attempts || 0) + 1, status: 'W_TRAKCIE', startedAt: new Date().toISOString(), number: p.number
+  };
+  save();
+  await interaction.reply({ content: '✅ Rozpoczynasz etap rekrutacji.', ephemeral: true });
+  await postQuestion(interaction, stage, 0);
+}
+
+async function answerTest(interaction, stage, index, answer) {
+  const store = stage === 'candidate' ? db.candidateTests : db.finalTests;
+  const test = store[interaction.user.id];
+  const questions = QUESTIONS[stage];
+  if (!test || test.channelId !== interaction.channel.id || test.index !== index) return interaction.reply({ content: '❌ To pytanie jest nieaktualne.', ephemeral: true });
+  if (Number(answer) === questions[index][2]) test.score++;
+  test.index++;
+  save();
+  await interaction.update({ components: [] });
+  if (test.index >= questions.length) {
+    const percent = Math.round((test.score / questions.length) * 100);
+    test.percent = percent;
+    test.status = percent >= 70 ? 'ZALICZONY' : 'NIEZALICZONY';
+    test.passed = percent >= 70;
+    test.finishedAt = new Date().toISOString();
+    save();
+    await logTo(interaction.guild, stage === 'candidate' ? '🎓 WYNIK REKRUTACJI KANDYDATA' : '🏁 WYNIK EGZAMINU KOŃCOWEGO', `<@${interaction.user.id}>\nWynik: **${percent}%**\nStatus: **${test.status}**\nPodejście: **${test.attempts}**`, ['wyniki-rekrutacji', 'wyniki-egzaminow']);
+    return interaction.channel.send({ embeds: [new EmbedBuilder().setTitle(stage === 'candidate' ? '🎓 REKRUTACJA ZAKOŃCZONA' : '🏁 EGZAMIN ZAKOŃCZONY').setDescription(`Wynik: **${percent}%**\nStatus: **${test.status}**\n${test.passed ? (stage === 'candidate' ? 'Możesz przejść do egzaminu końcowego.' : 'Proces rekrutacyjny zakończony wynikiem pozytywnym.') : 'Możesz ponownie podejść do tego etapu.'}`)] });
+  }
+  await postQuestion(interaction, stage, test.index);
+}
+
+async function handleCommand(i) {
+  const name = i.commandName;
+  const guild = i.guild;
+  if (name === 'zw-panel') {
+    if (!await staffOnly(i)) return;
+    const channel = findTextChannel(guild, ['panel-podania']);
+    if (!channel) return i.reply({ content: '❌ Nie znaleziono kanału panel-podania.', ephemeral: true });
+    await channel.send(publicPanel());
+    const contact = findTextChannel(guild, ['kontakt', 'pomoc']);
+    if (contact) await contact.send(helpPanel());
+    return i.reply({ content: '✅ Opublikowano panel podania publicznego i panel pomocy.', ephemeral: true });
+  }
+  if (name === 'zw-rekrutacja') {
+    if (!await staffOnly(i)) return;
+    const channel = findTextChannel(guild, ['podania-wewnetrzne', 'podanie-kandydat']);
+    if (!channel) return i.reply({ content: '❌ Nie znaleziono kanału rekrutacji kandydata.', ephemeral: true });
+    await channel.send(candidatePanel());
+    return i.reply({ content: '✅ Panel rekrutacji kandydata opublikowany.', ephemeral: true });
+  }
+  if (name === 'zw-egzamin-final') {
+    if (!await staffOnly(i)) return;
+    const channel = findTextChannel(guild, ['egzamin-kandydata', 'egzamin-finalowy']);
+    if (!channel) return i.reply({ content: '❌ Nie znaleziono kanału egzaminu końcowego.', ephemeral: true });
+    await channel.send(finalPanel());
+    return i.reply({ content: '✅ Panel egzaminu końcowego opublikowany.', ephemeral: true });
+  }
+  if (name === 'zw-pomoc') {
+    if (!await staffOnly(i)) return;
+    const channel = findTextChannel(guild, ['kontakt', 'pomoc']);
+    if (!channel) return i.reply({ content: '❌ Nie znaleziono kanału kontakt/pomoc.', ephemeral: true });
+    await channel.send(helpPanel());
+    return i.reply({ content: '✅ Panel pomocy opublikowany.', ephemeral: true });
+  }
+  if (name === 'zw-raport' || name === 'zw-meldunek') {
+    const text = i.options.getString('tresc');
+    const key = name === 'zw-raport' ? 'reports' : 'meldunki';
+    db[key].push({ userId: i.user.id, text, createdAt: new Date().toISOString() });
+    save();
+    await logTo(guild, name === 'zw-raport' ? '📄 RAPORT SŁUŻBOWY' : '📝 MELDUNEK', `Autor: <@${i.user.id}>\n${text}`, name === 'zw-raport' ? ['raporty', 'raporty-sluzbowe'] : ['meldunki']);
+    return i.reply({ content: name === 'zw-raport' ? '✅ Raport zapisany.' : '✅ Meldunek zapisany.', ephemeral: true });
+  }
+  if (name === 'zw-rozkaz') {
+    if (!await staffOnly(i)) return;
+    const title = i.options.getString('tytul'), text = i.options.getString('tresc');
+    db.orders.push({ title, text, by: i.user.id, createdAt: new Date().toISOString() });
+    save();
+    await logTo(guild, `📜 ROZKAZ — ${title}`, text, ['rozkazy']);
+    return i.reply({ content: '✅ Rozkaz zapisany.', ephemeral: true });
+  }
+  if (['zw-plus', 'zw-minus'].includes(name)) {
+    if (!await staffOnly(i)) return;
+    const user = i.options.getUser('osoba'), points = i.options.getInteger('punkty'), reason = i.options.getString('powod');
+    const p = personnel(user); p[name === 'zw-plus' ? 'plus' : 'minus'] += points;
+    p.history.push({ type: name === 'zw-plus' ? 'PLUS' : 'MINUS', points, reason, by: i.user.id, at: new Date().toISOString() });
+    db[name === 'zw-plus' ? 'pluses' : 'minuses'].push({ userId: user.id, points, reason, by: i.user.id, createdAt: new Date().toISOString() });
+    save();
+    await logTo(guild, name === 'zw-plus' ? '➕ PLUS' : '➖ MINUS', `<@${user.id}>\nPunkty: **${points}**\nPowód: ${reason}\nNadał: <@${i.user.id}>`, name === 'zw-plus' ? ['plusy', 'wyroznienia'] : ['minusy', 'sprawy-kadrowe']);
+    return i.reply({ content: '✅ Zapisano.', ephemeral: true });
+  }
+  if (name === 'zw-awans' || name === 'zw-degradacja') {
+    if (!await staffOnly(i)) return;
+    const user = i.options.getUser('osoba'), rank = i.options.getString('stopien'), reason = i.options.getString('powod');
+    const p = personnel(user), old = p.rank; p.rank = rank;
+    p.history.push({ type: name === 'zw-awans' ? 'AWANS' : 'DEGRADACJA', from: old, to: rank, reason, by: i.user.id, at: new Date().toISOString() });
+    db[name === 'zw-awans' ? 'promotions' : 'demotions'].push({ userId: user.id, from: old, to: rank, reason, by: i.user.id, createdAt: new Date().toISOString() });
+    save();
+    await logTo(guild, name === 'zw-awans' ? '⬆️ AWANS' : '⬇️ DEGRADACJA', `<@${user.id}>\n**${old} → ${rank}**\nPowód: ${reason}\nDecyzja: <@${i.user.id}>`, name === 'zw-awans' ? ['awanse'] : ['degradacje']);
+    return i.reply({ content: `✅ Zmieniono stopień: ${old} → ${rank}.`, ephemeral: true });
+  }
+  if (name === 'zw-postepowanie' || name === 'zw-wyroznienie') {
+    if (!await staffOnly(i)) return;
+    const user = i.options.getUser('osoba'), description = i.options.getString('opis'), p = personnel(user);
+    if (name === 'zw-postepowanie') { p.reprimands++; db.proceedings.push({ userId: user.id, description, by: i.user.id, createdAt: new Date().toISOString() }); }
+    else { p.awards.push(description); db.awards.push({ userId: user.id, description, by: i.user.id, createdAt: new Date().toISOString() }); }
+    p.history.push({ type: name, description, by: i.user.id, at: new Date().toISOString() }); save();
+    await logTo(guild, name === 'zw-postepowanie' ? '⚠️ POSTĘPOWANIE' : '🏅 WYRÓŻNIENIE', `<@${user.id}>\n${description}\nNadał: <@${i.user.id}>`, name === 'zw-postepowanie' ? ['postepowania'] : ['wyroznienia']);
+    return i.reply({ content: '✅ Zapisano.', ephemeral: true });
+  }
+  if (name === 'zw-szkolenie' || name === 'zw-kwalifikacja') {
+    if (!await staffOnly(i)) return;
+    const user = i.options.getUser('osoba'), title = i.options.getString('nazwa'), result = i.options.getString('wynik') || i.options.getString('status');
+    const p = personnel(user);
+    if (name === 'zw-szkolenie') { p.trainings.push({ title, result }); db.trainings.push({ userId: user.id, title, result, by: i.user.id, createdAt: new Date().toISOString() }); }
+    else { p.qualifications.push({ title, result }); db.qualifications.push({ userId: user.id, title, result, by: i.user.id, createdAt: new Date().toISOString() }); }
+    save();
+    await logTo(guild, name === 'zw-szkolenie' ? '🎓 SZKOLENIE' : '📋 KWALIFIKACJA', `<@${user.id}>\n**${title}**\n${result}`, name === 'zw-szkolenie' ? ['szkolenia'] : ['kwalifikacje']);
+    return i.reply({ content: '✅ Zapisano.', ephemeral: true });
+  }
+  if (name === 'zw-egzamin-szkoleniowy') {
+    if (!await staffOnly(i)) return;
+    const user = i.options.getUser('osoba'), title = i.options.getString('nazwa'), percent = i.options.getInteger('procent');
+    const status = percent >= 70 ? 'ZALICZONY' : 'NIEZALICZONY';
+    db.trainingExams.push({ userId: user.id, title, percent, status, by: i.user.id, createdAt: new Date().toISOString() }); save();
+    await logTo(guild, '📊 EGZAMIN SZKOLENIOWY', `<@${user.id}>\n**${title}**\nWynik: **${percent}%** — ${status}`, ['wyniki-egzaminow']);
+    return i.reply({ content: `✅ Zapisano wynik: ${percent}% — ${status}.`, ephemeral: true });
+  }
+  if (name === 'zw-funkcjonariusz') {
+    const user = i.options.getUser('osoba') || i.user, p = personnel(user);
+    return i.reply({ embeds: [new EmbedBuilder().setTitle('🪖 KARTA FUNKCJONARIUSZA ŻW').setDescription(
+      `<@${user.id}>\nNumer: **${p.number}**\nStopień: **${p.rank}**\n➕ Plusy: **${p.plus}**\n➖ Minusy: **${p.minus}**\n⚠️ Postępowania: **${p.reprimands}**\n🎓 Szkolenia: **${p.trainings.length}**\n📋 Kwalifikacje: **${p.qualifications.length}**`
+    )], ephemeral: true });
+  }
+  if (name === 'zw-sluzba') {
+    const action = i.options.getString('akcja'), p = personnel(i.user);
+    if (action === 'start') {
+      if (db.duty[i.user.id]) return i.reply({ content: '⚠️ Już jesteś w służbie.', ephemeral: true });
+      db.duty[i.user.id] = Date.now();
+      save(); await logTo(guild, '🟢 ROZPOCZĘCIE SŁUŻBY', `<@${i.user.id}> rozpoczął służbę.`, ['raporty', 'grafik-sluzby']);
+      return i.reply({ content: '🟢 Służba rozpoczęta.', ephemeral: true });
+    }
+    if (!db.duty[i.user.id]) return i.reply({ content: '⚠️ Nie jesteś w służbie.', ephemeral: true });
+    p.dutyMs += Date.now() - db.duty[i.user.id]; delete db.duty[i.user.id]; save();
+    await logTo(guild, '🔴 ZAKOŃCZENIE SŁUŻBY', `<@${i.user.id}> zakończył służbę.`, ['raporty', 'grafik-sluzby']);
+    return i.reply({ content: '🔴 Służba zakończona.', ephemeral: true });
+  }
+  if (name === 'zw-statystyki') {
+    if (!await staffOnly(i)) return;
+    return i.reply({ content: `👮 Funkcjonariusze: **${Object.keys(db.personnel).length}**\n📋 Podania: **${db.applications.length}**\n🎓 Rekrutacje: **${Object.keys(db.candidateTests).length}**\n🏁 Egzaminy końcowe: **${Object.keys(db.finalTests).length}**\n📄 Raporty: **${db.reports.length}**\n📝 Meldunki: **${db.meldunki.length}**\n📜 Rozkazy: **${db.orders.length}**\n🎓 Szkolenia: **${db.trainings.length}**\n🆘 Tickety: **${db.tickets.length}**`, ephemeral: true });
+  }
+  if (name === 'zw-zamknij') {
+    if (!await staffOnly(i)) return;
+    if (!i.channel || !i.channel.topic?.startsWith('ZW-TICKET:')) return i.reply({ content: '❌ To nie jest ticket ŻW.', ephemeral: true });
+    const ticket = db.tickets.find(x => x.channelId === i.channel.id);
+    if (ticket) { ticket.status = 'ZAMKNIĘTY'; ticket.closedBy = i.user.id; ticket.closedAt = new Date().toISOString(); save(); }
+    await i.reply({ content: '🔒 Zamykam ticket.', ephemeral: true });
+    return i.channel.delete().catch(() => {});
+  }
+}
+
+const cmd = (name, description) => new SlashCommandBuilder().setName(name).setDescription(description);
+const commands = [
+  cmd('zw-panel', 'Publikuje panel podania publicznego i pomocy'),
+  cmd('zw-rekrutacja', 'Publikuje panel rekrutacji kandydata'),
+  cmd('zw-egzamin-final', 'Publikuje panel egzaminu końcowego'),
+  cmd('zw-pomoc', 'Publikuje panel pomocy i ticketów'),
+  cmd('zw-zamknij', 'Zamyka ticket ŻW'),
+  cmd('zw-raport', 'Dodaje raport służbowy').addStringOption(o => o.setName('tresc').setDescription('Treść raportu').setRequired(true)),
+  cmd('zw-meldunek', 'Dodaje meldunek').addStringOption(o => o.setName('tresc').setDescription('Treść meldunku').setRequired(true)),
+  cmd('zw-rozkaz', 'Dodaje rozkaz').addStringOption(o => o.setName('tytul').setDescription('Tytuł').setRequired(true)).addStringOption(o => o.setName('tresc').setDescription('Treść').setRequired(true)),
+  cmd('zw-plus', 'Nadaje plus').addUserOption(o => o.setName('osoba').setDescription('Osoba').setRequired(true)).addIntegerOption(o => o.setName('punkty').setDescription('Punkty').setMinValue(1).setMaxValue(100).setRequired(true)).addStringOption(o => o.setName('powod').setDescription('Powód').setRequired(true)),
+  cmd('zw-minus', 'Nadaje minus').addUserOption(o => o.setName('osoba').setDescription('Osoba').setRequired(true)).addIntegerOption(o => o.setName('punkty').setDescription('Punkty').setMinValue(1).setMaxValue(100).setRequired(true)).addStringOption(o => o.setName('powod').setDescription('Powód').setRequired(true)),
+  cmd('zw-awans', 'Nadaje awans').addUserOption(o => o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o => o.setName('stopien').setDescription('Nowy stopień').setRequired(true).addChoices(...RANKS.map(x => ({ name: x, value: x })))).addStringOption(o => o.setName('powod').setDescription('Powód').setRequired(true)),
+  cmd('zw-degradacja', 'Nadaje degradację').addUserOption(o => o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o => o.setName('stopien').setDescription('Nowy stopień').setRequired(true).addChoices(...RANKS.map(x => ({ name: x, value: x })))).addStringOption(o => o.setName('powod').setDescription('Powód').setRequired(true)),
+  cmd('zw-postepowanie', 'Dodaje postępowanie').addUserOption(o => o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o => o.setName('opis').setDescription('Opis').setRequired(true)),
+  cmd('zw-wyroznienie', 'Dodaje wyróżnienie').addUserOption(o => o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o => o.setName('opis').setDescription('Opis').setRequired(true)),
+  cmd('zw-szkolenie', 'Dodaje szkolenie').addUserOption(o => o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o => o.setName('nazwa').setDescription('Nazwa szkolenia').setRequired(true)).addStringOption(o => o.setName('wynik').setDescription('Wynik/status').setRequired(true)),
+  cmd('zw-kwalifikacja', 'Dodaje kwalifikację').addUserOption(o => o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o => o.setName('nazwa').setDescription('Nazwa').setRequired(true)).addStringOption(o => o.setName('status').setDescription('Status').setRequired(true)),
+  cmd('zw-egzamin-szkoleniowy', 'Zapisuje wynik egzaminu szkoleniowego').addUserOption(o => o.setName('osoba').setDescription('Osoba').setRequired(true)).addStringOption(o => o.setName('nazwa').setDescription('Nazwa').setRequired(true)).addIntegerOption(o => o.setName('procent').setDescription('Wynik procentowy').setMinValue(0).setMaxValue(100).setRequired(true)),
+  cmd('zw-funkcjonariusz', 'Pokazuje kartę funkcjonariusza').addUserOption(o => o.setName('osoba').setDescription('Osoba').setRequired(false)),
+  cmd('zw-sluzba', 'Rozpoczyna lub kończy służbę').addStringOption(o => o.setName('akcja').setDescription('Akcja').setRequired(true).addChoices({ name: 'Rozpocznij', value: 'start' }, { name: 'Zakończ', value: 'stop' })),
+  cmd('zw-statystyki', 'Pokazuje statystyki systemu')
+].map(x => x.toJSON());
+
+client.once('ready', async () => {
+  const rest = new REST({ version: '10' }).setToken(TOKEN);
+  await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+  console.log(`🇵🇱 ŻW BOT ONLINE: ${client.user.tag}`);
+});
+
+client.on('interactionCreate', async interaction => {
+  try {
+    if (interaction.isChatInputCommand()) return handleCommand(interaction);
+    if (interaction.isButton()) {
+      if (interaction.customId === 'apply_public') return interaction.showModal(publicModal());
+      if (interaction.customId === 'ticket_help') return createTicket(interaction, 'pomoc');
+      if (interaction.customId === 'start_candidate') return startTest(interaction, 'candidate');
+      if (interaction.customId === 'start_final') return startTest(interaction, 'final');
+      if (interaction.customId === 'close_ticket') {
+        if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Tylko kadra może zamknąć ticket.', ephemeral: true });
+        const ticket = db.tickets.find(x => x.channelId === interaction.channel.id);
+        if (ticket) { ticket.status = 'ZAMKNIĘTY'; ticket.closedBy = interaction.user.id; ticket.closedAt = new Date().toISOString(); save(); }
+        await interaction.reply({ content: '🔒 Zamykam ticket.', ephemeral: true });
+        return interaction.channel.delete().catch(() => {});
+      }
+      if (interaction.customId.startsWith('answer:')) {
+        const [, stage, index, answer] = interaction.customId.split(':');
+        return answerTest(interaction, stage, Number(index), Number(answer));
+      }
+      if (['application_accept', 'application_reject'].includes(interaction.customId)) {
+        if (!await staffOnly(interaction)) return;
+        const app = db.applications.find(x => x.channelId === interaction.channel.id && x.status === 'OCZEKUJE');
+        if (!app) return interaction.reply({ content: '❌ Nie znaleziono oczekującego podania.', ephemeral: true });
+        app.status = interaction.customId === 'application_accept' ? 'PRZYJĘTE' : 'ODRZUCONE';
+        app.decidedBy = interaction.user.id; app.decidedAt = new Date().toISOString();
+        if (app.status === 'PRZYJĘTE') {
+          const member = await interaction.guild.members.fetch(app.userId).catch(() => null);
+          if (CANDIDATE_ROLE_ID && member) await member.roles.add(CANDIDATE_ROLE_ID).catch(() => {});
+          personnel(await interaction.client.users.fetch(app.userId));
+        }
+        save();
+        await interaction.reply({ content: app.status === 'PRZYJĘTE' ? '✅ Podanie przyjęte. Kandydat otrzymał status.' : '❌ Podanie odrzucone.', ephemeral: true });
+      }
+    }
+    if (interaction.isModalSubmit() && interaction.customId === 'public_application') {
+      const category = TICKET_CATEGORY_ID ? interaction.guild.channels.cache.get(TICKET_CATEGORY_ID) : null;
+      if (!category || category.type !== ChannelType.GuildCategory) return interaction.reply({ content: '❌ Brak poprawnego TICKET_CATEGORY_ID w .env.', ephemeral: true });
+      const existing = interaction.guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.topic === `ZW-APPLICATION:${interaction.user.id}` && db.applications.some(a => a.channelId === c.id && a.status === 'OCZEKUJE'));
+      if (existing) return interaction.reply({ content: `❌ Masz już oczekujące podanie: ${existing}`, ephemeral: true });
+      const overwrites = [
+        { id: interaction.guild.roles.everyone.id, deny: [P.ViewChannel] },
+        { id: interaction.user.id, allow: [P.ViewChannel, P.SendMessages, P.ReadMessageHistory] }
+      ];
+      for (const roleId of staffRoles) overwrites.push({ id: roleId, allow: [P.ViewChannel, P.SendMessages, P.ReadMessageHistory, P.ManageMessages] });
+      if (interaction.guild.members.me) overwrites.push({ id: interaction.guild.members.me.id, allow: [P.ViewChannel, P.SendMessages, P.ReadMessageHistory, P.ManageChannels] });
+      const channel = await interaction.guild.channels.create({ name: `podanie-${safeName(interaction.user.username)}`, type: ChannelType.GuildText, parent: category.id, topic: `ZW-APPLICATION:${interaction.user.id}`, permissionOverwrites: overwrites });
+      const data = {
+        userId: interaction.user.id,
+        channelId: channel.id,
+        status: 'OCZEKUJE',
+        name: interaction.fields.getTextInputValue('name'),
+        age: interaction.fields.getTextInputValue('age'),
+        experience: interaction.fields.getTextInputValue('experience'),
+        motivation: interaction.fields.getTextInputValue('motivation'),
+        availability: interaction.fields.getTextInputValue('availability'),
+        createdAt: new Date().toISOString()
+      };
+      db.applications.push(data); save();
+      await channel.send({ embeds: [new EmbedBuilder().setTitle('📋 NOWE PODANIE PUBLICZNE ŻW').setDescription(
+        `Kandydat: <@${data.userId}>\n**Imię i nazwisko RP:** ${data.name}\n**Wiek RP:** ${data.age}\n**Doświadczenie:** ${data.experience}\n**Motywacja:** ${data.motivation}\n**Dyspozycyjność:** ${data.availability}`
+      )], components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('application_accept').setLabel('Przyjmij do kandydatury').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('application_reject').setLabel('Odrzuć').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('close_ticket').setLabel('Zamknij').setStyle(ButtonStyle.Secondary)
+      )] });
+      return interaction.reply({ content: `✅ Podanie utworzone: ${channel}`, ephemeral: true });
+    }
+  } catch (error) {
+    console.error(error);
+    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ Wystąpił błąd. Sprawdź logi bota.', ephemeral: true }).catch(() => {});
+  }
+});
+
 client.login(TOKEN);
