@@ -1,9 +1,9 @@
 {
   "name": "zw-bot",
-  "version": "3.0.0",
-  "description": "Żandarmeria Wojskowa RP — rekrutacja, kadry, służba, raporty, meldunki, rozkazy, szkolenia i egzaminy",
-  "main": "src/index-complete.js",
-  "scripts": { "start": "node src/index-complete.js" },
+  "version": "3.1.0",
+  "description": "Żandarmeria Wojskowa RP — kompletny system rekrutacji, kadr, służby, raportów, rozkazów, meldunków, szkoleń i egzaminów",
+  "main": "src/index-final.js",
+  "scripts": { "start": "node src/index-final.js" },
   "engines": { "node": ">=20.0.0" },
   "dependencies": { "discord.js": "^14.25.1", "dotenv": "^16.6.1" }
 }
