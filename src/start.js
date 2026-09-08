@@ -37,7 +37,18 @@ function isStaff(member) {
 }
 
 async function handleTicketInteraction(interaction) {
-  // /zw-pomoc publikuje nowy panel z wyborem rodzaju sprawy.
+  // Stary przycisk z istniejącego panelu #kontakt otwiera teraz wybór konkretnej sprawy.
+  if (interaction.isButton() && interaction.customId === 'ticket_help') {
+    const panel = ticketSystem.panel();
+    await interaction.reply({
+      embeds: panel.embeds,
+      components: panel.components,
+      ephemeral: true
+    });
+    return true;
+  }
+
+  // /zw-pomoc publikuje pełny panel z wyborem rodzaju sprawy.
   if (interaction.isChatInputCommand() && interaction.commandName === 'zw-pomoc') {
     if (!isStaff(interaction.member)) {
       await interaction.reply({ content: '❌ Ta funkcja jest dostępna tylko dla kadry.', ephemeral: true });
