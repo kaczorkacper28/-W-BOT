@@ -14,7 +14,6 @@ function normalize(value) {
 
 async function discoverTicketCategory() {
   if (!TOKEN || !GUILD_ID) return null;
-
   const response = await fetch(`https://discord.com/api/v10/guilds/${GUILD_ID}/channels`, {
     headers: { Authorization: `Bot ${TOKEN}` }
   });
@@ -22,7 +21,6 @@ async function discoverTicketCategory() {
 
   const channels = await response.json();
   const contact = channels.find(c => c.type === 0 && ['kontakt', 'pomoc'].includes(normalize(c.name)));
-
   if (contact?.parent_id) {
     const category = channels.find(c => c.id === contact.parent_id && c.type === 4);
     if (category) return category.id;
@@ -39,9 +37,26 @@ function isStaff(member) {
 }
 
 async function handleTicketInteraction(interaction) {
+  // /zw-pomoc publikuje nowy panel z wyborem rodzaju sprawy.
+  if (interaction.isChatInputCommand() && interaction.commandName === 'zw-pomoc') {
+    if (!isStaff(interaction.member)) {
+      await interaction.reply({ content: '❌ Ta funkcja jest dostępna tylko dla kadry.', ephemeral: true });
+      return true;
+    }
+    const channel = interaction.guild.channels.cache.find(c =>
+      c.type === ChannelType.GuildText && ['kontakt', 'pomoc'].includes(normalize(c.name))
+    );
+    if (!channel) {
+      await interaction.reply({ content: '❌ Nie znaleziono kanału #kontakt.', ephemeral: true });
+      return true;
+    }
+    await channel.send(ticketSystem.panel());
+    await interaction.reply({ content: '✅ Nowy panel ticketów został opublikowany w #kontakt.', ephemeral: true });
+    return true;
+  }
+
   if (!interaction.isButton() && !interaction.isModalSubmit()) return false;
 
-  // Wybór rodzaju ticketu z panelu w #kontakt.
   if (interaction.isButton() && interaction.customId.startsWith('ticket_type:')) {
     const kind = interaction.customId.split(':')[1];
     if (!ticketSystem.TYPES[kind]) return false;
@@ -49,7 +64,6 @@ async function handleTicketInteraction(interaction) {
     return true;
   }
 
-  // Formularz ticketu: temat + opis sprawy.
   if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_details:')) {
     const kind = interaction.customId.split(':')[1];
     const subject = interaction.fields.getTextInputValue('subject');
@@ -72,7 +86,6 @@ async function handleTicketInteraction(interaction) {
     return true;
   }
 
-  // Zamknięcie ticketu przez przycisk.
   if (interaction.isButton() && ticketSystem.closeButtonId(interaction.customId)) {
     const channel = interaction.channel;
     if (!channel?.topic?.startsWith('ZW-TICKET:')) return false;
@@ -125,7 +138,6 @@ function installInteractionBridge() {
     process.env.TICKET_CATEGORY_ID = categoryId;
     console.log(`🎫 Kategoria ticketów: ${categoryId} (wykryta z #kontakt)`);
 
-    // Nowy system ticketów obsługuje kilka rodzajów spraw bez zmiany istniejącej struktury serwera.
     installInteractionBridge();
     require('./zw-system-v2.js');
   } catch (error) {
